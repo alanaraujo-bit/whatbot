@@ -1,17 +1,8 @@
 {
-  "services": {
-    "whatsapp-service": {
-      "root": "whatsapp-service",
-      "entrypoint": "index.ts"
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "whatsapp-service"
-      }
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "//": "O package.json aninhado em whatsapp-service/ faz o Vercel autodetectar o repo como monorepo multi-serviço e gerar um vercel.json que redireciona TODO o tráfego para lá. Fixamos o preset em nextjs para o Vercel buildar apenas o app web; o micro-serviço roda no Railway.",
+  "framework": "nextjs",
+  "buildCommand": "prisma generate && next build",
+  "installCommand": "npm install",
+  "regions": ["gru1"]
 }
