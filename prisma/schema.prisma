@@ -1,0 +1,380 @@
+// ==========================================================
+// Wapply — WhatsApp CRM Inteligente
+// Schema Prisma
+//
+// Modelo multi-tenant: tudo pendura em Workspace.
+// Um Workspace = uma empresa/conta. Usuários pertencem a um Workspace.
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------
+
+enum UserRole {
+  OWNER // criou o workspace, controle total
+  ADMIN // gerencia usuários e configurações
+  AGENT // apenas atende conversas
+}
+
+enum SessionStatus {
+  DISCONNECTED // nunca conectou ou foi desconectado
+  CONNECTING // socket abrindo
+  QR_PENDING // QR gerado, aguardando leitura
+  CONNECTED // pronto para enviar/receber
+  FAILED // erro irrecuperável (precisa reconectar)
+}
+
+enum WhatsappProviderKind {
+  BAILEYS // não-oficial, via QR Code (MVP)
+  CLOUD_API // oficial da Meta (futuro)
+}
+
+enum ConversationStatus {
+  OPEN // em atendimento
+  PENDING // aguardando resposta do cliente
+  CLOSED // finalizada
+}
+
+enum MessageDirection {
+  INBOUND // cliente -> empresa
+  OUTBOUND // empresa -> cliente
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACT
+  UNKNOWN
+}
+
+enum MessageStatus {
+  PENDING // na fila local
+  SENT // entregue ao WhatsApp
+  DELIVERED // entregue ao aparelho
+  READ // lida pelo cliente
+  FAILED // falhou no envio
+}
+
+/// Etapas do pipeline de CRM.
+enum CrmStage {
+  NEW_LEAD // Novo lead
+  CONTACTED // Contato realizado
+  NEGOTIATION // Negociação
+  WON // Venda concluída
+  LOST // Perdido
+}
+
+enum AutomationTrigger {
+  CONTAINS // mensagem contém a palavra-chave
+  EQUALS // mensagem é exatamente igual
+  STARTS_WITH // mensagem começa com
+  ANY_MESSAGE // qualquer mensagem recebida (ex.: boas-vindas)
+}
+
+// ----------------------------------------------------------
+// WORKSPACE (tenant)
+// ----------------------------------------------------------
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  sessions      WhatsappSession[]
+  contacts      Contact[]
+  conversations Conversation[]
+  messages      Message[]
+  tags          Tag[]
+  automations   Automation[]
+  notes         Note[]
+
+  @@map("workspaces")
+}
+
+// ----------------------------------------------------------
+// USUÁRIOS
+// ----------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  /// Hash bcrypt. Null quando o usuário só usa OAuth (Google/Apple no futuro).
+  passwordHash String?
+  avatarUrl    String?
+  role         UserRole @default(AGENT)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  /// Contas OAuth vinculadas (preparado para Google/Apple).
+  accounts              Account[]
+  sentMessages          Message[]
+  assignedConversations Conversation[] @relation("AssignedAgent")
+  notes                 Note[]
+
+  @@index([workspaceId])
+  @@map("users")
+}
+
+/// Vínculo com provedores OAuth. Não usado no MVP (login é email+senha),
+/// mas já modelado para plugar Google/Apple sem migração destrutiva.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  type              String
+  refreshToken      String? @db.Text
+  accessToken       String? @db.Text
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// ----------------------------------------------------------
+// SESSÃO DO WHATSAPP (o número conectado)
+// ----------------------------------------------------------
+
+model WhatsappSession {
+  id       String               @id @default(cuid())
+  name     String               @default("Principal")
+  provider WhatsappProviderKind @default(BAILEYS)
+  status   SessionStatus        @default(DISCONNECTED)
+
+  /// Número no formato E.164 sem "+" (ex.: 5511999998888). Preenchido após conectar.
+  phoneNumber String?
+  /// Nome do perfil no WhatsApp.
+  profileName String?
+  /// Data URL do QR Code atual. Volátil — limpo assim que conecta.
+  qrCode      String? @db.Text
+  /// Última mensagem de erro, quando status = FAILED.
+  lastError   String? @db.Text
+
+  lastConnectedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  conversations Conversation[]
+
+  @@index([workspaceId])
+  @@map("whatsapp_sessions")
+}
+
+// ----------------------------------------------------------
+// CONTATOS
+// ----------------------------------------------------------
+
+model Contact {
+  id    String  @id @default(cuid())
+  name  String
+  /// Somente dígitos, formato internacional (ex.: 5511999998888).
+  phone String
+  email String?
+
+  avatarUrl String?
+  company   String?
+  /// Observações rápidas (campo livre do cadastro).
+  notes     String?  @db.Text
+  stage     CrmStage @default(NEW_LEAD)
+  /// Ordem dentro da coluna do board de CRM.
+  stageRank Int      @default(0)
+  isBlocked Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  tags          Tag[]          @relation("ContactTags")
+  conversations Conversation[]
+  internalNotes Note[]
+
+  @@unique([workspaceId, phone])
+  @@index([workspaceId, stage])
+  @@map("contacts")
+}
+
+// ----------------------------------------------------------
+// ETIQUETAS
+// ----------------------------------------------------------
+
+model Tag {
+  id String @id @default(cuid())
+  name String
+  /// Cor hex (ex.: "#22c55e") usada nos badges da UI.
+  color String @default("#6366f1")
+
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  contacts Contact[] @relation("ContactTags")
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("tags")
+}
+
+// ----------------------------------------------------------
+// CONVERSAS
+// ----------------------------------------------------------
+
+model Conversation {
+  id String @id @default(cuid())
+
+  /// JID do WhatsApp (ex.: "5511999998888@s.whatsapp.net"). Chave natural do provider.
+  remoteJid          String
+  status             ConversationStatus @default(OPEN)
+  unreadCount        Int                @default(0)
+  isPinned           Boolean            @default(false)
+  /// Prévia da última mensagem, desnormalizada para a lista carregar rápido.
+  lastMessagePreview String?
+  lastMessageAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  session   WhatsappSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  assignedToId String?
+  assignedTo   User?   @relation("AssignedAgent", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  messages Message[]
+
+  @@unique([workspaceId, remoteJid])
+  @@index([workspaceId, lastMessageAt])
+  @@index([contactId])
+  @@map("conversations")
+}
+
+// ----------------------------------------------------------
+// MENSAGENS
+// ----------------------------------------------------------
+
+model Message {
+  id String @id @default(cuid())
+
+  /// ID da mensagem no WhatsApp. Usado para deduplicar reentregas do webhook.
+  externalId String?
+  direction  MessageDirection
+  type       MessageType      @default(TEXT)
+  content    String           @db.Text
+  mediaUrl   String?
+  mediaMime  String?
+  status     MessageStatus    @default(SENT)
+  /// True quando a mensagem foi disparada por uma regra de automação.
+  isAutomated Boolean         @default(false)
+  timestamp  DateTime         @default(now())
+
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  /// Agente que enviou (null para inbound e para mensagens automáticas).
+  sentById String?
+  sentBy   User?   @relation(fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, externalId])
+  @@index([conversationId, timestamp])
+  @@map("messages")
+}
+
+// ----------------------------------------------------------
+// NOTAS INTERNAS (não vão para o cliente)
+// ----------------------------------------------------------
+
+model Note {
+  id        String   @id @default(cuid())
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+  @@map("notes")
+}
+
+// ----------------------------------------------------------
+// AUTOMAÇÕES
+// ----------------------------------------------------------
+
+model Automation {
+  id       String            @id @default(cuid())
+  name     String
+  isActive Boolean           @default(true)
+  trigger  AutomationTrigger @default(CONTAINS)
+  /// Palavra-chave do gatilho. Ignorada quando trigger = ANY_MESSAGE.
+  keyword  String?
+  /// Texto enviado como resposta automática.
+  response String            @db.Text
+
+  /// Menor número = avaliada primeiro. Só a primeira regra que casar dispara.
+  priority Int @default(0)
+  /// Quando true, só responde na primeira mensagem da conversa (boas-vindas).
+  onlyFirstMessage Boolean @default(false)
+
+  /// Contador de disparos, para a UI mostrar utilidade da regra.
+  triggerCount Int       @default(0)
+  lastTriggeredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, isActive, priority])
+  @@map("automations")
+}

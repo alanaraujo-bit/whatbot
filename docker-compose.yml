@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wapply-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wapply
+      POSTGRES_PASSWORD: wapply
+      POSTGRES_DB: wapply
+    ports:
+      # 5433 no host para não conflitar com um Postgres já instalado na máquina.
+      - "5433:5432"
+    volumes:
+      - wapply_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wapply -d wapply"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  wapply_pgdata:

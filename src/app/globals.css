@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens do Wapply.
+ *
+ * Paleta neutra fria (zinc) + verde WhatsApp como acento apenas onde faz
+ * sentido semântico (bolha de saída, status conectado). O produto é uma
+ * ferramenta de trabalho: contraste alto, cromatismo baixo, densidade alta.
+ */
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 8%;
+
+    --primary: 158 64% 34%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 20%;
+
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+
+    --accent: 240 5% 94%;
+    --accent-foreground: 240 6% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 158 64% 34%;
+
+    --sidebar: 240 6% 97%;
+    --sidebar-foreground: 240 5% 35%;
+    --sidebar-accent: 240 6% 92%;
+    --sidebar-border: 240 6% 89%;
+
+    /* Bolhas do chat */
+    --bubble-in: 0 0% 100%;
+    --bubble-out: 152 52% 90%;
+
+    --radius: 0.6rem;
+  }
+
+  .dark {
+    --background: 240 10% 7%;
+    --foreground: 240 5% 92%;
+
+    --card: 240 8% 10%;
+    --card-foreground: 240 5% 92%;
+
+    --popover: 240 8% 11%;
+    --popover-foreground: 240 5% 92%;
+
+    --primary: 158 58% 44%;
+    --primary-foreground: 240 10% 6%;
+
+    --secondary: 240 6% 15%;
+    --secondary-foreground: 240 5% 88%;
+
+    --muted: 240 6% 15%;
+    --muted-foreground: 240 5% 58%;
+
+    --accent: 240 6% 18%;
+    --accent-foreground: 240 5% 92%;
+
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 5% 18%;
+    --input: 240 5% 20%;
+    --ring: 158 58% 44%;
+
+    --sidebar: 240 9% 9%;
+    --sidebar-foreground: 240 5% 65%;
+    --sidebar-accent: 240 6% 16%;
+    --sidebar-border: 240 5% 16%;
+
+    --bubble-in: 240 6% 16%;
+    --bubble-out: 158 32% 22%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    /* Respeita a safe-area do iOS quando instalado como PWA. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+
+  /* Scrollbar discreta, estilo Linear. */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
+
+@layer components {
+  /*
+   * Fundo sutil da área de mensagens — remete ao WhatsApp sem copiar
+   * o padrão de doodles (que pesa e polui em telas densas).
+   */
+  .chat-canvas {
+    background-color: hsl(var(--muted) / 0.35);
+    background-image: radial-gradient(hsl(var(--border) / 0.6) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* Some com a barra de rolagem mantendo o scroll funcional. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

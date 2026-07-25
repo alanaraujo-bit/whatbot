@@ -1,0 +1,9 @@
+# Normaliza finais de linha: LF no repositório, nativo no working copy.
+# Evita que commits feitos no Windows apareçam como "arquivo inteiro alterado".
+* text=auto eol=lf
+
+# Binários — nunca converter.
+*.png binary
+*.jpg binary
+*.ico binary
+*.webp binary
