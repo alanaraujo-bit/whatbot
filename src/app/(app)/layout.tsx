@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
+import { NotificationWatcher } from "@/components/layout/notification-watcher";
 
 /**
  * Shell autenticado.
@@ -29,6 +30,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="min-h-0 flex-1 overflow-hidden pb-14 md:pb-0">{children}</main>
         <MobileTabBar />
       </div>
+
+      {/* Som e notificação de mensagem nova, em qualquer página do app. */}
+      <NotificationWatcher />
     </div>
   );
 }

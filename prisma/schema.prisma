@@ -93,6 +93,14 @@ model Workspace {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+
+  /// Quando true, mensagens enviadas levam o nome do atendente ("*Ana:*\n...").
+  /// O cliente passa a saber com quem está falando.
+  agentSignatureEnabled Boolean @default(false)
+
+  /// Toca som ao chegar mensagem com a aba fora de foco.
+  notificationSoundEnabled Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

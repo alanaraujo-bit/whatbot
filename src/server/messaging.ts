@@ -30,24 +30,36 @@ export async function resolveConversation(params: {
   sessionId: string | null;
   remoteJid: string;
   pushName?: string | null;
+  profilePicUrl?: string | null;
 }): Promise<Conversation & { isNew: boolean }> {
-  const { workspaceId, sessionId, remoteJid, pushName } = params;
+  const { workspaceId, sessionId, remoteJid, pushName, profilePicUrl } = params;
+  const phone = jidToPhone(remoteJid);
 
   const existing = await prisma.conversation.findUnique({
     where: { workspaceId_remoteJid: { workspaceId, remoteJid } },
   });
-  if (existing) return { ...existing, isNew: false };
 
-  const phone = jidToPhone(remoteJid);
+  if (existing) {
+    // A conversa já existe, mas a foto pode ter mudado (ou nunca ter sido
+    // buscada, no caso de contatos criados antes deste recurso).
+    if (profilePicUrl) {
+      await prisma.contact.updateMany({
+        where: { workspaceId, phone, avatarUrl: { not: profilePicUrl } },
+        data: { avatarUrl: profilePicUrl },
+      });
+    }
+    return { ...existing, isNew: false };
+  }
 
   const contact = await prisma.contact.upsert({
     where: { workspaceId_phone: { workspaceId, phone } },
-    update: {},
+    update: { avatarUrl: profilePicUrl ?? undefined },
     create: {
       workspaceId,
       phone,
       // Sem nome no perfil, usa o número formatado — melhor que "Desconhecido".
       name: pushName?.trim() || formatPhone(phone),
+      avatarUrl: profilePicUrl ?? null,
     },
   });
 
@@ -83,6 +95,7 @@ export async function ingestInboundMessage(
     sessionId,
     remoteJid: message.from,
     pushName: message.pushName,
+    profilePicUrl: message.profilePicUrl,
   });
 
   const messageCount = await prisma.message.count({
@@ -165,8 +178,17 @@ export async function sendTextMessage(params: {
   /** Agente responsável. Null em respostas automáticas. */
   userId?: string | null;
   isAutomated?: boolean;
-}): Promise<{ id: string }> {
-  const { workspaceId, conversationId, content, userId = null, isAutomated = false } = params;
+  /** Nome exibido na assinatura. Quando ausente, não assina. */
+  agentName?: string | null;
+}) {
+  const {
+    workspaceId,
+    conversationId,
+    content,
+    userId = null,
+    isAutomated = false,
+    agentName = null,
+  } = params;
 
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, workspaceId },
@@ -175,6 +197,13 @@ export async function sendTextMessage(params: {
   if (!conversation) {
     throw new Error("Conversa não encontrada");
   }
+
+  /**
+   * O texto que vai para o WhatsApp pode levar a assinatura do atendente,
+   * mas o que guardamos é o texto puro: assinar no banco poluiria o histórico
+   * e faria a assinatura aparecer duplicada se a mensagem fosse reenviada.
+   */
+  const outgoingText = agentName ? `*${agentName}:*\n${content}` : content;
 
   const message = await prisma.message.create({
     data: {
@@ -187,6 +216,7 @@ export async function sendTextMessage(params: {
       sentById: userId,
       isAutomated,
     },
+    include: { sentBy: { select: { id: true, name: true } } },
   });
 
   // Prévia atualizada antes do envio: a UI mostra a mensagem imediatamente.
@@ -212,21 +242,25 @@ export async function sendTextMessage(params: {
 
   try {
     const provider = getWhatsAppProvider();
-    const { externalId } = await provider.sendText(sessionId, conversation.remoteJid, content);
+    const { externalId } = await provider.sendText(
+      sessionId,
+      conversation.remoteJid,
+      outgoingText
+    );
 
-    await prisma.message.update({
+    const sent = await prisma.message.update({
       where: { id: message.id },
       data: { status: "SENT", externalId },
+      include: { sentBy: { select: { id: true, name: true } } },
     });
+    publish({ type: "message:new", workspaceId, conversationId });
+    return sent;
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Falha no envio";
     await markFailed(message.id, reason);
-    throw new Error(reason);
-  } finally {
     publish({ type: "message:new", workspaceId, conversationId });
+    throw new Error(reason);
   }
-
-  return { id: message.id };
 }
 
 async function markFailed(messageId: string, reason: string): Promise<void> {

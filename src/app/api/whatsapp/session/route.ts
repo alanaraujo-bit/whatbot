@@ -1,5 +1,5 @@
 import { handle, requireAuth } from "@/lib/api";
-import { prisma } from "@/lib/prisma";
+import { getOrCreatePrimarySession } from "@/server/whatsapp-session";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +13,7 @@ export async function GET() {
   return handle(async () => {
     const { workspaceId } = await requireAuth();
 
-    let session = await prisma.whatsappSession.findFirst({
-      where: { workspaceId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    // Workspaces criados antes deste endpoint podem não ter sessão ainda.
-    if (!session) {
-      session = await prisma.whatsappSession.create({
-        data: { name: "Número principal", workspaceId },
-      });
-    }
+    const session = await getOrCreatePrimarySession(workspaceId);
 
     return {
       id: session.id,

@@ -3,6 +3,10 @@
 import { useCallback, useState } from "react";
 import useSWR from "swr";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { apiRequest } from "@/lib/fetcher";
+import type { MessageItem } from "@/types";
 
 import { ChatHeader } from "@/components/conversations/chat-header";
 import { ContactPanel } from "@/components/conversations/contact-panel";
@@ -70,6 +74,61 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
   const conversation = data!.conversation;
 
+  /**
+   * Envio otimista.
+   *
+   * A mensagem entra no cache do SWR ANTES da requisição, então aparece no
+   * chat instantaneamente. Sem isso o atendente esperava o round-trip até o
+   * WhatsApp mais um refetch da conversa inteira — segundos de silêncio depois
+   * de apertar Enter, que era a queixa principal de lentidão.
+   */
+  async function sendMessage(content: string) {
+    const optimistic: MessageItem = {
+      // O id temporário é substituído pela resposta do servidor.
+      id: `temp-${Date.now()}`,
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation.id,
+      externalId: null,
+      direction: "OUTBOUND",
+      type: "TEXT",
+      content,
+      mediaUrl: null,
+      mediaMime: null,
+      status: "PENDING",
+      isAutomated: false,
+      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      sentById: null,
+      sentBy: null,
+    };
+
+    const withOptimistic = {
+      conversation: { ...conversation, messages: [...conversation.messages, optimistic] },
+    };
+
+    try {
+      await mutate(
+        async () => {
+          const res = await apiRequest<{ message: MessageItem }>("/api/messages", {
+            method: "POST",
+            body: { conversationId: conversation.id, content },
+          });
+          // Troca a temporária pela definitiva, preservando a ordem.
+          return {
+            conversation: {
+              ...conversation,
+              messages: [...conversation.messages, res.message],
+            },
+          };
+        },
+        { optimisticData: withOptimistic, rollbackOnError: true, revalidate: true }
+      );
+    } catch (error) {
+      toast.error((error as Error).message);
+      throw error;
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -82,11 +141,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
 
         <MessageList messages={conversation.messages} />
 
-        <MessageComposer
-          conversationId={conversation.id}
-          contactName={conversation.contact.name}
-          onSent={() => mutate()}
-        />
+        <MessageComposer contactName={conversation.contact.name} onSend={sendMessage} />
       </div>
 
       {/*

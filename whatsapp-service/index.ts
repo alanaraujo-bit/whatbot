@@ -172,6 +172,8 @@ type WebhookEvent =
         timestamp: number;
         mediaType?: string | null;
         fromMe?: boolean;
+        /** URL da foto de perfil do contato, quando pública. */
+        profilePicUrl?: string | null;
       };
     }
   | {
@@ -286,6 +288,37 @@ function extractContent(message: proto.IMessage | null | undefined): {
   }
 
   return { text: "", mediaType: null };
+}
+
+// --------------------------------------------------------------------------
+// Foto de perfil
+// --------------------------------------------------------------------------
+
+/**
+ * URLs de foto de perfil expiram, então guardamos em cache curto para não
+ * consultar o WhatsApp a cada mensagem — um contato tagarela geraria dezenas
+ * de chamadas por minuto, e o WhatsApp limita esse endpoint com rigor.
+ */
+const profilePicCache = new Map<string, { url: string | null; fetchedAt: number }>();
+const PROFILE_PIC_TTL = 6 * 60 * 60 * 1000; // 6 horas
+
+async function getProfilePicture(sock: WASocket, jid: string): Promise<string | null> {
+  const cached = profilePicCache.get(jid);
+  if (cached && Date.now() - cached.fetchedAt < PROFILE_PIC_TTL) {
+    return cached.url;
+  }
+
+  let url: string | null = null;
+  try {
+    // "image" devolve a foto em alta; "preview" seria a miniatura.
+    url = (await sock.profilePictureUrl(jid, "image")) ?? null;
+  } catch {
+    // 404 é o caso normal: o contato não tem foto ou restringiu quem pode vê-la.
+    url = null;
+  }
+
+  profilePicCache.set(jid, { url, fetchedAt: Date.now() });
+  return url;
 }
 
 // --------------------------------------------------------------------------
@@ -414,6 +447,8 @@ async function startSession(sessionId: string): Promise<SessionRuntime> {
       const { text, mediaType } = extractContent(msg.message);
       if (!text) continue; // protocolo/recibo, não é mensagem de verdade
 
+      const profilePicUrl = await getProfilePicture(sock, remoteJid);
+
       await postWebhook({
         type: "message",
         sessionId,
@@ -425,6 +460,7 @@ async function startSession(sessionId: string): Promise<SessionRuntime> {
           timestamp: Number(msg.messageTimestamp ?? Math.floor(Date.now() / 1000)),
           mediaType,
           fromMe: Boolean(msg.key.fromMe),
+          profilePicUrl,
         },
       });
     }

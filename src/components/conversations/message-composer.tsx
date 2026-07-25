@@ -2,23 +2,20 @@
 
 import { useRef, useState } from "react";
 import { Loader2, Paperclip, Send, Smile } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { apiRequest } from "@/lib/fetcher";
 import { cn } from "@/lib/utils";
 
 const MAX_LENGTH = 4096;
 
 export function MessageComposer({
-  conversationId,
   contactName,
-  onSent,
+  onSend,
 }: {
-  conversationId: string;
   contactName: string;
-  onSent: () => void;
+  /** Faz o envio otimista. Rejeita quando o envio falha. */
+  onSend: (content: string) => Promise<void>;
 }) {
   const [content, setContent] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -37,21 +34,17 @@ export function MessageComposer({
     if (!text || isSending) return;
 
     setIsSending(true);
-    // Limpa otimisticamente: o campo travado com o texto dá sensação de lentidão.
+    // Limpa na hora: campo travado com o texto dá sensação de lentidão.
     setContent("");
     requestAnimationFrame(autoResize);
 
     try {
-      await apiRequest("/api/messages", {
-        method: "POST",
-        body: { conversationId, content: text },
-      });
-      onSent();
-    } catch (error) {
+      await onSend(text);
+    } catch {
       // Devolve o texto para o usuário não perder o que escreveu.
+      // O toast do erro já foi exibido por quem fez o envio.
       setContent(text);
       requestAnimationFrame(autoResize);
-      toast.error((error as Error).message);
     } finally {
       setIsSending(false);
       textareaRef.current?.focus();

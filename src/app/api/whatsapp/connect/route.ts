@@ -2,6 +2,7 @@ import { ApiError, handle, requireAuth } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { publish } from "@/server/events";
 import { getWhatsAppProvider } from "@/server/whatsapp";
+import { getPrimarySession } from "@/server/whatsapp-session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,7 @@ export async function POST() {
   return handle(async () => {
     const { workspaceId } = await requireAuth();
 
-    const session = await prisma.whatsappSession.findFirst({
-      where: { workspaceId },
-      orderBy: { createdAt: "asc" },
-    });
+    const session = await getPrimarySession(workspaceId);
     if (!session) throw new ApiError("Sessão de WhatsApp não encontrada", 404);
 
     if (session.status === "CONNECTED") {

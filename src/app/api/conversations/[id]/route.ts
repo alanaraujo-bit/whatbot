@@ -6,6 +6,13 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
+/**
+ * Quantas mensagens o chat carrega. Como a UI faz polling, este payload
+ * viaja a cada poucos segundos — 100 cobre o histórico visível sem tornar
+ * cada atualização cara.
+ */
+const MESSAGE_WINDOW = 100;
+
 /** Conversa completa: contato, etiquetas, notas e histórico de mensagens. */
 export async function GET(_request: Request, { params }: Params) {
   return handle(async () => {
@@ -26,9 +33,15 @@ export async function GET(_request: Request, { params }: Params) {
         },
         assignedTo: { select: { id: true, name: true } },
         messages: {
-          orderBy: { timestamp: "asc" },
-          // Limite defensivo: conversas antigas podem ter milhares de mensagens.
-          take: 300,
+          /**
+           * As mensagens MAIS RECENTES, não as mais antigas.
+           *
+           * Ordenar asc + take pegava as N primeiras: numa conversa longa o
+           * atendente abria o chat e via o começo do histórico, sem a mensagem
+           * que acabou de chegar. Buscamos desc e invertemos abaixo.
+           */
+          orderBy: { timestamp: "desc" },
+          take: MESSAGE_WINDOW,
           include: { sentBy: { select: { id: true, name: true } } },
         },
       },
@@ -45,7 +58,14 @@ export async function GET(_request: Request, { params }: Params) {
       publish({ type: "conversation:updated", workspaceId, conversationId: conversation.id });
     }
 
-    return { conversation: { ...conversation, unreadCount: 0 } };
+    // O banco devolveu do mais novo para o mais antigo; a UI renderiza cronológico.
+    return {
+      conversation: {
+        ...conversation,
+        unreadCount: 0,
+        messages: conversation.messages.reverse(),
+      },
+    };
   });
 }
 

@@ -70,6 +70,8 @@ export type WebhookEvent =
         mediaType?: string | null;
         /** True quando a mensagem foi enviada pelo próprio número (outro device). */
         fromMe?: boolean;
+        /** Foto de perfil do contato, quando pública. */
+        profilePicUrl?: string | null;
       };
     }
   | {

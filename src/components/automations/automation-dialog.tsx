@@ -3,8 +3,11 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+import { AutomationTester } from "@/components/automations/automation-tester";
+import { describeRestrictiveness } from "@/lib/automation-matching";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -80,8 +83,11 @@ export function AutomationDialog({
   }, [open, automation, reset]);
 
   const trigger = watch("trigger");
-  const onlyFirstMessage = watch("onlyFirstMessage");
+  const onlyFirstMessage = watch("onlyFirstMessage") ?? false;
+  const keyword = watch("keyword") ?? "";
+  const response = watch("response") ?? "";
   const needsKeyword = trigger !== "ANY_MESSAGE";
+  const restrictivenessWarning = describeRestrictiveness(trigger, onlyFirstMessage);
 
   async function onSubmit(values: AutomationInput) {
     try {
@@ -138,6 +144,7 @@ export function AutomationDialog({
                     </SelectItem>
                   ))}
                 </SelectContent>
+
               </Select>
             </div>
 
@@ -185,7 +192,7 @@ export function AutomationDialog({
             <div className="pr-3">
               <p className="text-xs font-medium">Apenas na primeira mensagem</p>
               <p className="text-[10px] text-muted-foreground">
-                Ideal para mensagens de boas-vindas.
+                Ideal para boas-vindas. Fora isso, deixe desligado.
               </p>
             </div>
             <Switch
@@ -193,6 +200,22 @@ export function AutomationDialog({
               onCheckedChange={(checked) => setValue("onlyFirstMessage", checked)}
             />
           </div>
+
+          {restrictivenessWarning && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2">
+              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                {restrictivenessWarning}
+              </p>
+            </div>
+          )}
+
+          <AutomationTester
+            trigger={trigger}
+            keyword={keyword}
+            response={response}
+            onlyFirstMessage={onlyFirstMessage}
+          />
 
           <DialogFooter className="pt-1">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

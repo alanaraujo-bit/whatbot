@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/settings", label: "WhatsApp" },
+  { href: "/settings/preferences", label: "Preferências" },
   { href: "/settings/tags", label: "Etiquetas" },
   { href: "/settings/profile", label: "Perfil" },
 ];

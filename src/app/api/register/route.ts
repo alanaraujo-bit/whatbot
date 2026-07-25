@@ -50,6 +50,48 @@ export async function POST(request: Request) {
           { name: "Cliente VIP", color: "#a855f7", workspaceId: workspace.id },
         ],
       });
+
+      /**
+       * Automações iniciais, criadas DESATIVADAS.
+       *
+       * Uma conta nova começando com a tela de automações vazia levava o
+       * usuário a montar a primeira regra do zero, sem referência — e a errar
+       * a combinação de gatilho. Exemplos prontos servem de modelo; ele revisa
+       * o texto e liga quando quiser.
+       */
+      await tx.automation.createMany({
+        data: [
+          {
+            workspaceId: workspace.id,
+            name: "Boas-vindas",
+            trigger: "ANY_MESSAGE",
+            keyword: null,
+            response:
+              "Olá! 👋 Recebemos sua mensagem e um atendente responderá em instantes.",
+            priority: 99,
+            onlyFirstMessage: true,
+            isActive: false,
+          },
+          {
+            workspaceId: workspace.id,
+            name: "Perguntas sobre preço",
+            trigger: "CONTAINS",
+            keyword: "preço",
+            response: "Olá! Vou te ajudar com informações sobre nossos preços. 💰",
+            priority: 0,
+            isActive: false,
+          },
+          {
+            workspaceId: workspace.id,
+            name: "Formas de pagamento",
+            trigger: "CONTAINS",
+            keyword: "pix",
+            response: "Sim, aceitamos Pix! Posso te passar a chave agora.",
+            priority: 1,
+            isActive: false,
+          },
+        ],
+      });
     });
 
     return { ok: true };

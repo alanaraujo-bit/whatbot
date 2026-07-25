@@ -1,5 +1,6 @@
 import type { Automation } from "@prisma/client";
 
+import { matchesTrigger } from "@/lib/automation-matching";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -13,35 +14,6 @@ import { prisma } from "@/lib/prisma";
  * chame o modelo aqui passando o histórico da conversa como contexto. O resto
  * do fluxo (persistir, enviar, publicar evento) continua igual.
  */
-
-/** Normaliza para comparação: minúsculas e sem acentos. */
-function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .trim();
-}
-
-function matches(automation: Automation, message: string): boolean {
-  if (automation.trigger === "ANY_MESSAGE") return true;
-
-  const keyword = normalize(automation.keyword ?? "");
-  if (!keyword) return false;
-
-  const text = normalize(message);
-
-  switch (automation.trigger) {
-    case "CONTAINS":
-      return text.includes(keyword);
-    case "EQUALS":
-      return text === keyword;
-    case "STARTS_WITH":
-      return text.startsWith(keyword);
-    default:
-      return false;
-  }
-}
 
 /**
  * Encontra a automação que deve responder a uma mensagem recebida.
@@ -62,7 +34,9 @@ export async function findMatchingAutomation(
 
   for (const automation of automations) {
     if (automation.onlyFirstMessage && !isFirstMessage) continue;
-    if (matches(automation, message)) return automation;
+    if (matchesTrigger(automation.trigger, automation.keyword, message)) {
+      return automation;
+    }
   }
 
   return null;

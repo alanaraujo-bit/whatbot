@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Bot, Pencil, Plus, Sparkles, Trash2, Zap } from "lucide-react";
+import { AlertTriangle, Bot, Pencil, Plus, Sparkles, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { AutomationDialog } from "@/components/automations/automation-dialog";
@@ -171,7 +171,7 @@ export function AutomationsView() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Zap className="h-3 w-3" />
                       {automation.triggerCount} disparo(s)
@@ -185,6 +185,23 @@ export function AutomationsView() {
                       </span>
                     )}
                   </div>
+
+                  {/*
+                    Regra ativa que nunca disparou costuma ser regra mal
+                    configurada, não regra sem demanda. Empurra para o teste.
+                  */}
+                  {automation.isActive && automation.triggerCount === 0 && (
+                    <button
+                      onClick={() => setEditing(automation)}
+                      className="flex w-full items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-left transition-colors hover:bg-amber-500/20"
+                    >
+                      <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+                      <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                        Esta regra nunca disparou. Clique para abrir e testar com uma
+                        mensagem de exemplo.
+                      </span>
+                    </button>
+                  )}
                 </CardContent>
               </Card>
             ))
