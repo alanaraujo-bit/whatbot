@@ -1,0 +1,12 @@
+# Arquivos que NÃO devem ir para o deploy do Vercel.
+#
+# O micro-serviço de WhatsApp roda no Railway como processo próprio. Se ele
+# subir junto para o Vercel, o builder o empacota como função serverless e
+# executa o `index.ts` a cada requisição — o processo tenta abrir socket e
+# escrever credenciais em disco, falha, e derruba TODAS as rotas com 500.
+whatsapp-service/
+
+# Configuração e utilitários que não fazem parte do runtime da web.
+.railway/
+scripts/
+docker-compose.yml

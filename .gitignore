@@ -44,3 +44,7 @@ whatsapp-service/.sessions/
 
 # uploads locais
 public/uploads/
+.deploy-secrets.json
+
+.vercel
+.env*

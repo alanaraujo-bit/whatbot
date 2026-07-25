@@ -1,0 +1,17 @@
+{
+  "services": {
+    "whatsapp-service": {
+      "root": "whatsapp-service",
+      "entrypoint": "index.ts"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "whatsapp-service"
+      }
+    }
+  ]
+}
